@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arisan — Rotating savings circles on Tari Ootle</title>
+<meta name="description" content="Walletless demo of Arisan, a rotating savings circle (ROSCA) template for Tari Ootle. Simulated entirely in your browser — no wallet needed.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <h1>Arisan <span class="subtitle">— Rotating savings circles on Tari Ootle</span></h1>
+    <p class="walletless-badge" role="note">⚡ Walletless demo — simulated in your browser, no wallet needed</p>
+    <p class="lede">
+      An <em>arisan</em> is a rotating savings circle: every member contributes a fixed
+      amount each round, and each round one member — in join order — takes the whole
+      pot. This page runs the exact rules of the Arisan template as a simulation, so
+      you can try a full circle, watch a member default, and see how the leftover
+      pot is shared — without spending anything.
+    </p>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="how-heading">
+      <h2 id="how-heading">How it works</h2>
+      <ol class="how-list">
+        <li><strong>Join</strong> a circle by paying one contribution up front — that is your round-1 payment. The circle starts automatically once the last seat is taken.</li>
+        <li><strong>Contribute</strong> the fixed amount every round. Once everyone in good standing has paid (or the round deadline passes), anyone can settle the round and the recipient takes the whole pot.</li>
+        <li><strong>Miss a deadline</strong> and you default: you lose your payout turn, the pot rolls over to the next round, and your past contributions stay in the pot.</li>
+        <li><strong>When the circle completes</strong>, any leftover pot is shared equally by members in good standing — or by everyone if all defaulted, so funds are never stuck.</li>
+      </ol>
+      <p class="honest-note">
+        This page simulates the template logic in your browser. The real template is
+        <code>src/lib.rs</code> (Rust, <code>#[template]</code>), tested with the Tari
+        engine test harness. Every demo account starts with 1,000 simulated TARI.
+      </p>
+    </section>
+
+    <section class="card" aria-labelledby="create-heading">
+      <h2 id="create-heading">Create a circle</h2>
+      <form id="create-form" class="form-grid">
+        <label>
+          Contribution (TARI)
+          <input id="contribution" type="number" min="0" step="any" value="10" required>
+        </label>
+        <label>
+          Members (2–16)
+          <input id="max-members" type="number" min="2" max="16" step="1" value="3" required>
+        </label>
+        <label>
+          Round length (epochs)
+          <input id="round-length" type="number" min="1" step="1" value="10" required>
+        </label>
+        <div class="form-actions">
+          <button id="create-btn" type="submit" class="btn primary">Create circle</button>
+          <button id="reset-btn" type="button" class="btn">Reset demo</button>
+        </div>
+      </form>
+      <p class="hint">
+        You are the organizer. Creating a circle mints you a one-time organizer badge
+        (an NFT on-chain) that can cancel the circle while it is still forming.
+      </p>
+      <div class="demo-buttons">
+        <button id="load-demo-btn" type="button" class="btn">Load 3-member demo</button>
+        <button id="autoplay-btn" type="button" class="btn">Auto-play full circle</button>
+        <button id="simulate-default-btn" type="button" class="btn">Simulate a default</button>
+      </div>
+      <p class="hint">
+        <strong>Load 3-member demo:</strong> Alice, Bob and Carol join a 10 TARI circle.
+        <strong>Auto-play</strong> runs every round to completion.
+        <strong>Simulate a default</strong> walks through Bob missing round 2, with narration.
+      </p>
+    </section>
+
+    <section class="card" aria-labelledby="epoch-heading">
+      <h2 id="epoch-heading">Epoch control</h2>
+      <p>
+        Current epoch: <strong id="epoch-display">—</strong>
+        <span class="hint">(on-chain, the epoch comes from consensus; here you move time yourself)</span>
+      </p>
+      <div class="btn-row">
+        <button id="advance-1-btn" type="button" class="btn">Advance 1 epoch</button>
+        <button id="advance-deadline-btn" type="button" class="btn">Advance to deadline</button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="dash-heading">
+      <h2 id="dash-heading">Circle dashboard</h2>
+      <p id="no-circle-note" class="hint">No circle yet — create one above or load the 3-member demo.</p>
+      <dl id="dashboard" class="dashboard" hidden>
+        <div><dt>Status</dt><dd><span id="dash-status" class="status-pill">—</span></dd></div>
+        <div><dt>Pot</dt><dd id="dash-pot">—</dd></div>
+        <div><dt>Round</dt><dd id="dash-round">—</dd></div>
+        <div><dt>Round deadline</dt><dd id="dash-deadline">—</dd></div>
+        <div><dt>Recipient this round</dt><dd id="dash-recipient">—</dd></div>
+        <div><dt>Organizer</dt><dd id="dash-organizer">—</dd></div>
+        <div><dt>Organizer badge</dt><dd id="dash-badge">—</dd></div>
+        <div><dt>Leftover share</dt><dd id="dash-leftover">—</dd></div>
+      </dl>
+      <div class="btn-row">
+        <button id="payout-btn" type="button" class="btn primary">Settle round (payout)</button>
+        <button id="cancel-btn" type="button" class="btn danger">Cancel circle</button>
+        <label class="badge-toggle">
+          <input id="badge-checkbox" type="checkbox" checked>
+          I hold the organizer badge
+        </label>
+      </div>
+      <p class="hint">
+        Payout is permissionless: anyone can settle a round once everyone in good
+        standing has paid or the deadline has passed. Uncheck the badge box to see
+        what happens when cancel is called with the wrong badge.
+      </p>
+    </section>
+
+    <section id="narration" class="card narration" aria-live="polite" hidden>
+      <h2>What is happening</h2>
+      <ol id="narration-list"></ol>
+    </section>
+
+    <section class="card" aria-labelledby="members-heading">
+      <h2 id="members-heading">Members</h2>
+      <div id="join-panel" class="join-panel" hidden>
+        <p><strong>Join the circle</strong> — <span id="seats-remaining"></span></p>
+        <div id="join-list" class="btn-row"></div>
+        <p class="hint">Joining costs exactly one contribution, paid up front as the round-1 payment. Join order is payout order.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="member-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Member</th>
+              <th>Paid this round</th>
+              <th>Defaulted</th>
+              <th>Payout</th>
+              <th>Leftover</th>
+              <th>Balance</th>
+              <th>Net</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="member-rows">
+            <tr><td colspan="9" class="empty-row">No members yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="log-heading">
+      <h2 id="log-heading">Event log</h2>
+      <p class="hint">Newest first. Rejected actions are shown with the template's exact error message.</p>
+      <ol id="event-log" class="event-log"></ol>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://github.com/tiannuryadins/ootle-arisan">github.com/tiannuryadins/ootle-arisan</a>
+      · MIT License · Unaudited demo — not financial advice.
+    </p>
+    <p class="hint">Arisan (Indonesia), tanda (Latin America), susu (West Africa &amp; the Caribbean), hui (China), stokvel (South Africa) — one of the world's oldest savings institutions, now as a Tari Ootle template.</p>
+  </footer>
+
+</div>
+<script src="arisan.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
